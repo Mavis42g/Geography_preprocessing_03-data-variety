@@ -1,6 +1,19 @@
+# The template for all exercise and some general notes:
+
+# using tensorflow (in later exercises):
+
+```
+library(reticulate)
+use_condaenv('r-reticulate')
+library(tensorflow)
+tf_version()
+```
+
+ignore the angry red error, it's tries (and fails) to detect a gpu, which we don't have available here
+
 # template
 
-common template for all exercises and the pinned image
+Template for new exercises
 
 ## Introduction
 
