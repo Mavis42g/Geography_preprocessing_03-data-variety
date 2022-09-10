@@ -1,0 +1,33 @@
+{
+  "@renku_data_type": "renku.domain_model.project.Project",
+  "@renku_oid": "project",
+  "agent_version": "1.6.0",
+  "annotations": [],
+  "automated_update": true,
+  "creator": {
+    "@renku_data_type": "renku.domain_model.provenance.agent.Person",
+    "@renku_data_value": {
+      "affiliation": null,
+      "alternate_name": null,
+      "email": "benjamin.flueck@usys.ethz.ch",
+      "id": "mailto:benjamin.flueck@usys.ethz.ch",
+      "name": "Benjamin Flück"
+    }
+  },
+  "date_created": {
+    "@renku_data_type": "datetime.datetime",
+    "@renku_data_value": "2022-09-10T20:55:59+00:00"
+  },
+  "description": "common template for all exercises and the pinned image",
+  "id": "/projects/ESDS/2022/template",
+  "immutable_template_files": [],
+  "keywords": [],
+  "minimum_renku_version": "1.2.0",
+  "name": "template",
+  "template_id": "R-minimal",
+  "template_metadata": "{\"__template_source__\": \"https://github.com/SwissDataScienceCenter/renku-project-template\", \"__template_ref__\": \"0.3.4\", \"__template_id__\": \"R-minimal\", \"__namespace__\": \"ESDS/2022\", \"__automated_update__\": true, \"__repository__\": \"https://renkulab.io/gitlab\", \"__sanitized_project_name__\": \"template\", \"__project_slug__\": \"ESDS/2022/template\", \"__project_description__\": \"common template for all exercises and the pinned image\", \"__renku_version__\": \"1.6.0\", \"name\": \"template\", \"__name__\": \"template\", \"__template_version__\": \"fc5953b87e53ec5bd5a3288ce6660b39a9f0107c\"}",
+  "template_ref": "0.3.4",
+  "template_source": "https://github.com/SwissDataScienceCenter/renku-project-template",
+  "template_version": "fc5953b87e53ec5bd5a3288ce6660b39a9f0107c",
+  "version": 9
+}
