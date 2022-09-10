@@ -1,4 +1,4 @@
-# The template for all exercise and some general notes:
+The template for all exercise and some general notes:
 
 # using tensorflow (in later exercises):
 
