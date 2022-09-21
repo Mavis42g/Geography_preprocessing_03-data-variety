@@ -1,0 +1,285 @@
+---
+title: "Week 3 Tutorial: Exploratory Data Analysis"
+author: "Eliza Harris"
+date: "2022-10-04"
+output: html_document
+---
+
+```{r message=FALSE}
+require(lubridate)
+require(tidyverse)
+require(ncdf4)
+require(viridis)
+require(raster)
+require(rworldmap)
+require(EFDR)
+```
+
+In this tutorial and the following exercise, we will deal with some more complex datasets and work through the data exploration skills we have learnt about in the lecture videos. 
+
+## Data profiling
+
+We will start by importing global mean temperature data, part of the HadCRUT reanalysis dataset produced by the UK Met Office and the Climate Research Unit at the University of East Anglia (https://crudata.uea.ac.uk/cru/data/temperature/). This data is the mean monthly temperature per gridcell from 1961-1990, and is used as a baseline to calculate temperature anomalies driven by climate change. The data are in netcdf format (.nc), which is useful for multidimensional datasets. Netcdf is often used in atmospheric research to deal with the four key dimensions of time, latitude, longitude, and altitude.
+
+```{r}
+nc_data = nc_open('absolute_v5.nc')
+print(nc_data) # Runs an "nc dump" to show a summary of the file
+```
+
+The nc dump shows us an overview of the file. First we see the variables contained. This file has only one variable; temperature (**tem**). The variable has **attributes**, which we can see include the full name of the variable, the units, offset and scaling factors, and fill and missing values. 
+
+After the variables we see the dimensions. There are 3 dimensions, **time**, **lon** and **lat**. We can see the attributes of the dimensions, including full names, units, axes. Longitude and latitude have sizes of 72 and 36 respectively, corresponding to 5&deg; grid cells. If we look back at **tem** we see it is defined in terms of **[lon,lat,time]**, which means that temperature is a 3D variable following these 3 defined dimensions. The variable is surface temperature so we don't have the fourth dimension of altitude or atmospheric level. 
+
+At the bottom of the dump we can see 8 global attributes; attributes belonging to the dataset as a whole. These describe the history, ownership and license of the data. Netcdf is a widely used format because of the ability to save metadata as attributes, and to keep multiple dimensions of data in a single file. R, python and other data analysis programs have packages to read netcdf; here we have required the **ncdf4** package.
+
+## Data cleaning
+
+Here we will select the variables we need from the netcdf data.
+
+```{r}
+lon <- ncvar_get(nc_data, "lon")
+head(lon) # show the start of the lon data vector
+
+lat <- ncvar_get(nc_data, "lat", verbose = F)
+head(lat) # show the start of the lat data vector
+
+tem <- ncvar_get(nc_data, "tem")
+dim(tem) # temperature has dimensions of lon,lat,month
+
+fillvalue = ncatt_get(nc_data, "tem", "missing_value", verbose="F")
+fillvalue # Get also the missing value designator (we know this is -9999 from the nc dump)
+
+nc_close(nc_data) # We have the data so we can close the netcdf file
+```
+
+We will look for missing values and replace with a standard NaN.
+
+```{r}
+sum(tem == fillvalue$value) # See how many missing values there are
+tem[tem == fillvalue$value] = NaN
+# This is a cleaned reanalysis dataset so there are no missing values, but we run the code as an illustration
+```
+
+Finally, we will save our temperature dataset as a list to keep our workspace tidy.
+
+```{r}
+abs_tem = list(lat=lat,lon=lon,tem=tem)
+```
+
+## Data reduction
+
+To illustrate data reduction procedures, we will look at the mean monthly temperature in different latitude bands. First we will use **discretization** to select several latitude bands, and then we will **aggregate** to find the monthly means for each of these bands.
+
+```{r}
+lat_cutoffs = c(-90,-60,-30,0,30,60,90)
+# Preallocate array for the results; dimensions = time, latitude band, mean/std
+mean_tem_latbands = array(dim=c(12,length(lat_cutoffs)-1,2))
+# Discretize latitude
+abs_tem$lat_band = abs_tem$tem*NaN # space for discretized lat band, same size as tem 
+for (n in 1:(length(lat_cutoffs)-1)){
+  tmp = abs_tem$lat > lat_cutoffs[n] & abs_tem$lat <= lat_cutoffs[n+1]
+  abs_tem$lat_band[,tmp,] = n 
+}
+# Monthly mean for each band
+for (n in 1:12){
+  labels = as.vector(abs_tem$lat_band[,,n]) # convert to vector so we can use aggregate
+  data = as.vector(abs_tem$tem[,,n])
+  res = aggregate(data, list(labels), FUN=mean) 
+  mean_tem_latbands[n,,1] = aggregate(data, list(labels), FUN=mean)$x
+  mean_tem_latbands[n,,2] = aggregate(data, list(labels), FUN=sd)$x
+}
+```
+
+Now we will plot the mean and standard deviation of temperature for each latitude band.
+
+```{r}
+par(mar=c(2,4,1,1)) # set plotting margins
+par(mfrow=c(2,1)) # Create subplots for mean and stdev
+colours = viridis(6) # Viridis gives us a set of a chosen number of colour-blind friendly colours for plotting
+plot(1:12,mean_tem_latbands[,1,1],type="n",xlab="month",ylab="Mean T",ylim=c(-40,40),xlim=c(1,12)) # initialize empty plot 
+for (n in 1:6){
+  lines(1:12,mean_tem_latbands[,n,1],col=colours[n])
+}
+plot(1:12,mean_tem_latbands[,1,2],type="n",xlab="month",ylab="Stdev in T",ylim=c(0,25),xlim=c(1,12)) # initialize empty plot 
+for (n in 1:6){
+  lines(1:12,mean_tem_latbands[,n,2],col=colours[n])
+}
+legend("bottomleft", legend=(paste0(head(lat_cutoffs,-1)," to ",tail(lat_cutoffs,-1))),col=colours,lty=1,cex=0.5)
+```
+
+From this plots, we can clearly see the seasonal and latitudinal changes in mean temperature. The second subplot shows that the lowest latitude band has the highest variability in temperature within the band; if we were working further with this data we might want to break this band up into smaller chunks.
+
+## Data transformation
+
+To easily plot a global map, we first want to convert slices of our data to rasters.
+
+```{r}
+# Convert the January slice to a raster
+r = raster(t(abs_tem$tem[,,1]), xmn=min(abs_tem$lon), xmx=max(abs_tem$lon), ymn=min(abs_tem$lat), ymx=max(abs_tem$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+r = flip(r, direction='y') # We need to flip upside down as southern data is first in the file
+plot(r,ylim=c(-90,90),xlim=c(-180,180),main="Mean January temperature")
+plot(coastsCoarse,add=TRUE,col='black') # Add continental outlines from the rworldmap package
+```
+
+Another common transformation is to regrid the data. The data is currently on a 5&deg; grid with 36 latitude and 72 longitude values. To regrid, we first need to create a dataframe with values x, y, z representing lon, lat, tem.
+
+```{r}
+lon_vec = rep(abs_tem$lon,length(abs_tem$lat))
+lat_vec = rep(abs_tem$lat,each=length(abs_tem$lon))
+tem_vec = as.vector(abs_tem$tem[,,1]) # Regrid the January slice
+df = data.frame(x=lat_vec,y=lon_vec,z=tem_vec)
+```
+
+Now we regrid the data using the **regrid** function from the EFDR package. We'll regrid to 25 latitude and 100 longitude bands, so that we can see a large difference.
+
+```{r}
+df_regrid = regrid(
+  df, # the dataframe with x, y, z to regrid
+  n1 = 25, # the new x dimension
+  n2 = 100, # the new y dimension
+  method = "idw", # regrid method (inverse-distance-weighting)
+  idp = 0.5, # the inverse distance power for weighting, eg. the weight further-away grid cells contribute with
+  nmax = 4 # the max number of neighbours to use; more neighbours = more smoothing
+)
+```
+
+It's useful to convert back to our original data format.
+
+```{r}
+lat_r = unique(df_regrid$x)
+lon_r = unique(df_regrid$y)
+tem_r = matrix(nrow=length(lon_r),ncol=length(lat_r))
+for (n in 1:length(lon_r)){ # Convert the regridded temp vector to a matrix
+  istart = (n-1)*length(lat_r)+1
+  iend = n*length(lat_r)
+  tem_r[n,] = df_regrid$z[istart:iend]
+}
+abs_tem_r = list(lon=lon_r,lat=lat_r,tem=tem_r)
+# This dataframe has the new gridding but the same format as the previous matrix, except that we do not have multiple months as we only regridded January.
+```
+
+Finally, plot to compare.
+
+```{r}
+# Because the format is the same, we can use the same plotting code as before
+r_r = raster(t(abs_tem_r$tem), xmn=min(abs_tem_r$lon), xmx=max(abs_tem_r$lon), ymn=min(abs_tem_r$lat), ymx=max(abs_tem_r$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+r_r = flip(r_r, direction='y') # We need to flip upside down as southern data is first in the file
+
+par(mar=c(2,4,1,1)) # set plotting margins
+par(mfrow=c(2,1))
+plot(r,ylim=c(-90,90),xlim=c(-180,180),main="Original data")
+plot(coastsCoarse,add=TRUE,col='black')
+plot(r_r,ylim=c(-90,90),xlim=c(-180,180),main="Regridded data")
+plot(coastsCoarse,add=TRUE,col='black') 
+```
+
+## Comparing sites
+
+Now we will select four grid cells at random using the *sample*, and compare them with a few of the methods we heard about in the lecture. 
+
+```{r}
+set.seed(20)
+lat_i = sample(1:36,4,replace=TRUE) # lat indexes of chosen cells
+set.seed(20)
+lon_i = sample(1:72,4,replace=TRUE) # lon indexes of chosen cells
+```
+
+We'll get the data from the gridcells into a matrix. **Site** and **Month** will be columns so that we can use them as factors for aggregation and comparisons.
+
+```{r}
+site_data = data.frame(matrix(nrow=48,ncol=3))
+colnames(site_data) = c("site","month","tem")
+for (n in 1:4){
+  istart = (n-1)*12+1
+  site_data$site[istart:(istart+11)] = n
+  site_data$month[istart:(istart+11)] = 1:12
+  site_data$tem[istart:(istart+11)] = abs_tem$tem[lon_i[n],lat_i[n],]
+}
+print(paste0("lat=",abs_tem$lat[lat_i]))
+print(paste0("lon=",abs_tem$lon[lon_i]))
+aggregate(site_data$tem, list(site_data$site), FUN=mean) 
+aggregate(site_data$tem, list(site_data$site), FUN=sd) 
+```
+
+Now we'll look at a few ways to compare the sites. We are not going to go into the statistics in detail - that is covered in your basic statistics courses. Here we just focus on implementation and interpretation of these techniques in R.
+
+```{r, warning=FALSE}
+# t test, unpaired and pairwise
+# mann whitney test, unpaired and pairwise
+ttest_res = array(dim=c(4,4,2)) # space for results
+ttestpair_res = array(dim=c(4,4,2))
+mw_res = matrix(nrow=4,ncol=4)
+mwpair_res = matrix(nrow=4,ncol=4)
+for (n in 1:4){
+  for (i in 1:4){ 
+    # in this double loop, we select each of our pairs of sites in turn
+    s1 = site_data$tem[site_data$site==n]
+    s2 = site_data$tem[site_data$site==i]
+    # perform unpaired t test
+    res = t.test(s1, s2, paired = FALSE, alternative = "two.sided")
+    ttest_res[n,i,1] = res$p.value # save the p value
+    ttest_res[n,i,2] = res$estimate[1]-res$estimate[2] # and the difference in means
+    # perform paired t test
+    res = t.test(s1, s2, paired = TRUE, alternative = "two.sided")
+    ttestpair_res[n,i,1] = res$p.value # save the p value
+    ttestpair_res[n,i,2] = res$estimate # this time, estimate is the mean difference
+    # perform unpaired mw-wilcox test
+    res = wilcox.test(s1, s2, paired = FALSE)
+    mw_res[n,i] = res$p.value # save the p value
+    # perform paired mw-wilcox test
+    res = wilcox.test(s1, s2, paired = TRUE)
+    mwpair_res[n,i] = res$p.value # save the p value
+  }
+}
+
+# Print results
+print(ttest_res)
+print(ttestpair_res)
+```
+
+Looking at the results, we see that the differences in means (second z dimension of t-test arrays) were largest between sites 1 and 3, and smallest between sites 3 and 4, as we saw when we found the means with aggregate. The differences between means are all significant except for between sites 3 and 4, which is expected when we look at the means and standard deviations we found with aggregate. The p-values are mostly lower (= more significant) for the paired test. In the paired test, sites 3 and 4 are significantly different, as the seasonal cycle is the same for both sites. For site 1, p-values are lower for the paired test - it is the only Southern hemisphere site and has opposite seasonality.
+
+```{r}
+print(mw_res)
+print(mwpair_res)
+```
+
+The Mann-Whitney-Wilcoxon test results show similar patterns. We would need to test for normality to know which test is giving the most appropriate results. 
+
+These results have illustrated how to implement different tests in R, and show us the importance of choosing the right test. We need to think about whether we want to compare annual mean temperature, or temperature in paired months. We could also think about paired tests after accounting for differences in the timing of seasonality between hemispheres.
+
+Another common test is an ANOVA, with a post-hoc test like TukeyHSD to determine adjusted p-values and confidence levels. This can be implemented for multiple pairwise comparisons using built in functions, thus requiring much less code.
+
+```{r}
+#  Perform TukeyHSD with one-way ANOVA
+model = aov(tem ~ as.factor(site), data = site_data)
+summary(model)
+TukeyHSD(model, conf.level=.95)
+```
+
+We see similar results: Significant differences except between sites 3 and 4. Additionally, we get an estimate of the lower and upper confidence intervals for the difference between each pair of sites.  
+
+Finally, we will find the Euclidean distance between each pair of sites.
+
+```{r, warning=FALSE}
+# The Euclidean distance function needs a matrix, and compares all rows of the matrix
+x = rbind(site_data$tem[site_data$site==1],
+    site_data$tem[site_data$site==2],
+    site_data$tem[site_data$site==3],
+    site_data$tem[site_data$site==4])
+stats::dist(x, method = "euclidean")
+# This also can be used with methods: "maximum", "manhattan", "canberra", "binary" or "minkowski"
+```
+
+As we found with the other methods, the difference is greatest between sites 1 and 3, and smallest between sites 3 and 4. 
+
+In this tutorial, we have learnt:
+
+* How to open and use data from a netcdf (.nc) file
+* Basic data preprocessing skills
+* Regridding and plotting geographical datasets
+* Implementing statistical techniques to compare samples
+
+
+
+

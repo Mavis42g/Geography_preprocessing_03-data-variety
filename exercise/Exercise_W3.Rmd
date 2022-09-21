@@ -1,0 +1,110 @@
+---
+title: "Exercise with solutions, week 3: Exploratory Data Analysis"
+author: "Eliza Harris"
+date: '2022-10-04'
+output: html_document
+---
+
+```{r message=FALSE}
+require(lubridate)
+require(tidyverse)
+require(ncdf4)
+require(viridis)
+require(raster)
+require(rworldmap)
+require(EFDR)
+# Add more packages if you need!
+```
+
+# Global mean temperature data
+
+In the tutorial, we used mean global temperature data to practice skills in data preprocessing and exploratory analysis. We will begin using the same dataset to examine some techniques more closely. Begin by importing the data and selecting the lon, lat and temperature variables into a list in the same format as the tutorial.
+
+```{r}
+# Add your solution here
+```
+
+# Regridding data
+
+In the tutorial, we used the **regrid** function. Write a wrapper function for **regrid** with the format:
+
+* regrid_wrapper = function(df,n1,n2,idp,nmax,plotresults=TRUE){}
+
+* The input df should be a dataframe with variables lon, lat, tem. You'll need to select just one month of data for the input.
+
+* n1,n2,idp,nmax will be passed on to regrid
+
+* The output should be a dataframe the same format as the input
+
+* `plotresults' is optional input with TRUE as the default. If TRUE, A plot comparing the original and regridded data will be created.
+
+```{r}
+# Add your solution here:
+regrid_wrapper = function(input,n1,n2,idp,nmax,plotresults=TRUE){
+  # Add function here
+}
+```
+
+Use the function to investigate the results of regridding to a 50*50 grid with idp of 0.01, 1, 100 (test with nmax=10) and nmax of 1, 10, 25 (test with idp=1). Write a brief description of the impact of these two parameters. It will be helpful if you print values of n1,n2,idp,nmax on the plots output by your regrid function.
+
+```{r}
+# Add your solution here
+```
+
+*Describe the effect of idp and nmax.*
+
+# Temperature anomaly data
+
+Import the global temperature anomaly data in **HadCRUT.4.6.0.0.median.nc**. What variables, dimensions and attributes are present in this dataset?
+
+```{r}
+# Add your solution here
+```
+
+Extract lon, lat, time and temperature anomaly as well as the fill value. Use the attributes on the time variable to convert it to a timestamp. Replace filled data with NaNs. Combine the selected data into a list.
+
+```{r}
+# Add your solution here
+```
+
+# Correlations between temperature anomaly and other variables
+
+Look at the dimensions of our two datasets. If regridding is required to compare the two datasets, regrid the mean temperature data.
+
+```{r}
+# Add your solution here
+```
+
+We will consider correlations between temperature anomaly in June and December 2015. Select these slices and plot scatterplots between (longitude, latitude, absolute latitude, mean temperature) and temperature anomalies for June and December 2015. 
+
+* Use 4 x 2 subplots for this, so that all comparisons are included in one figure. Include the linear fit on the scatter plot. 
+
+* Normalise the data to between 0 and 1 before analysing, so that slopes are comparible between different variables. 
+
+* Save the slopes and p-values for the linear fits as well as the Pearson correlation coefficients.
+
+```{r}
+# Add your solution here
+```
+
+What patterns can you see in the data you have plotted?
+
+* Which variable has the largest slope for the relationship with temperature anomaly? 
+
+*Solution* 
+
+* Which variable has the closest relationship to temperature anomaly (highest Pearson correlation coefficient)?
+
+*Solution*
+
+* Looking at the shapes of the curves, are there other transformations or processing approaches you would apply to the data to further investigate relationships?
+
+*Solution*
+
+* Can you see evidence for rapid Arctic warming in your plots? See https://eos.org/science-updates/understanding-causes-and-effects-of-rapid-warming-in-the-arctic for more information.
+
+*Solution*
+
+
+
+
