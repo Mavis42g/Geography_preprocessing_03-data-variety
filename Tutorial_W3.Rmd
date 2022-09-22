@@ -22,7 +22,7 @@ In this tutorial and the following exercise, we will deal with some more complex
 We will start by importing global mean temperature data, part of the HadCRUT reanalysis dataset produced by the UK Met Office and the Climate Research Unit at the University of East Anglia (https://crudata.uea.ac.uk/cru/data/temperature/). This data is the mean monthly temperature per gridcell from 1961-1990, and is used as a baseline to calculate temperature anomalies driven by climate change. The data are in netcdf format (.nc), which is useful for multidimensional datasets. Netcdf is often used in atmospheric research to deal with the four key dimensions of time, latitude, longitude, and altitude.
 
 ```{r}
-nc_data = nc_open('absolute_v5.nc')
+nc_data = nc_open('data/absolute_v5.nc')
 print(nc_data) # Runs an "nc dump" to show a summary of the file
 ```
 
