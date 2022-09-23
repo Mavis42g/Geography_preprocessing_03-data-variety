@@ -46,7 +46,10 @@ packages <- c("ade4",
               "vip",
               "visdat",
               "XML",
-              "yardstick"
+              "yardstick", 
+              'EFDR', 
+              'ncdf4', 
+              'rworldmap'
 )
 
 install.packages(packages)
