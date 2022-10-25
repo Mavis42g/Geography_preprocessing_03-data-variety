@@ -1,6 +1,6 @@
 ---
 title: "Exercise with solutions, week 3: Exploratory Data Analysis"
-author: "Eliza Harris"
+author: "Ruoyi Chen"
 date: '2022-10-04'
 output: html_document
 ---
@@ -13,7 +13,7 @@ require(viridis)
 require(raster)
 require(rworldmap)
 require(EFDR)
-# Add more packages if you need!
+
 ```
 
 # Global mean temperature data
@@ -21,7 +21,15 @@ require(EFDR)
 In the tutorial, we used mean global temperature data to practice skills in data preprocessing and exploratory analysis. We will begin using the same dataset to examine some techniques more closely. Begin by importing the data and selecting the lon, lat and temperature variables into a list in the same format as the tutorial.
 
 ```{r}
-# Add your solution here
+# import
+nc_data = nc_open('../data/absolute_v5.nc')
+# create the list
+lon <- ncvar_get(nc_data, "lon")
+lat <- ncvar_get(nc_data, "lat", verbose = F)
+tem <- ncvar_get(nc_data, "tem")
+nc_close(nc_data)
+abs_tem = list(lat=lat,lon=lon,tem=tem)
+
 ```
 
 # Regridding data
@@ -39,16 +47,65 @@ In the tutorial, we used the **regrid** function. Write a wrapper function for *
 * `plotresults' is optional input with TRUE as the default. If TRUE, A plot comparing the original and regridded data will be created.
 
 ```{r}
-# Add your solution here:
+# select one month data
+set.seed(5) 
+i = sample(1:12,1,replace=TRUE)
+# transform into dataframe
+lon_vec = rep(abs_tem$lon,length(abs_tem$lat))
+lat_vec = rep(abs_tem$lat,each=length(abs_tem$lon))
+tem_vec = as.vector(abs_tem$tem[,,i])
+df = data.frame(x=lat_vec,y=lon_vec,z=tem_vec)
+
 regrid_wrapper = function(input,n1,n2,idp,nmax,plotresults=TRUE){
-  # Add function here
+  df_regrid = regrid(input, n1 = n1, n2 = n2, method = "idw", idp = idp, nmax = nmax)
+
+  lat_r = unique(df_regrid$x)
+  lon_r = unique(df_regrid$y)
+  tem_r = matrix(nrow=length(lon_r),ncol=length(lat_r))
+  for (n in 1:length(lon_r)){ 
+    istart = (n-1)*length(lat_r)+1
+    iend = n*length(lat_r)
+    tem_r[n,] = df_regrid$z[istart:iend]
+  }
+
+  abs_tem_r = list(lon=lon_r,lat=lat_r,tem=tem_r)
+
+  r = raster(t(abs_tem$tem[,,1]), xmn=min(abs_tem$lon), xmx=max(abs_tem$lon), ymn=min(abs_tem$lat), ymx=max(abs_tem$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+  r = flip(r, direction='y')
+
+  r_r = raster(t(abs_tem_r$tem), xmn=min(abs_tem_r$lon), xmx=max(abs_tem_r$lon), ymn=min(abs_tem_r$lat), ymx=max(abs_tem_r$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+  r_r = flip(r_r, direction='y') 
+
+ # decide if to draw the plot
+  if (plotresults ==TRUE) {
+    par(mar=c(2,4,1,1)) 
+    par(mfrow=c(2,1))
+    plot(r,ylim=c(-90,90),xlim=c(-180,180),main="Original data")
+    plot(coastsCoarse,add=TRUE,col='black')
+    plot(r_r,ylim=c(-90,90),xlim=c(-180,180),main="Regridded data")
+    plot(coastsCoarse,add=TRUE,col='black') 
+    legend("bottomleft", legend=(paste0(c("n1","n2","idp","nmax"),"=", c(n1,n2,idp,nmax))),col = 1, cex = 0.5)
+  }
+
+
 }
 ```
 
 Use the function to investigate the results of regridding to a 50*50 grid with idp of 0.01, 1, 100 (test with nmax=10) and nmax of 1, 10, 25 (test with idp=1). Write a brief description of the impact of these two parameters. It will be helpful if you print values of n1,n2,idp,nmax on the plots output by your regrid function.
 
 ```{r}
-# Add your solution here
+# list the parameters
+grid_para <- data.frame(matrix(nrow = 2, ncol = 3))
+grid_para[1,] <- c(0.01, 1, 100)
+grid_para[2,] <- c(1, 10, 25)
+# plot under various combination of parameters
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(12,1))
+for (n in 1:3){
+  test_idp = regrid_wrapper(df, 50, 50, grid_para[1, n], grid_para[2, 2], plotresults=TRUE)
+  test_nmax = regrid_wrapper(df, 50, 50, grid_para[1, 2], grid_para[2, n], plotresults=TRUE)
+}
+
 ```
 
 *Describe the effect of idp and nmax.*
@@ -58,13 +115,31 @@ Use the function to investigate the results of regridding to a 50*50 grid with i
 Import the global temperature anomaly data in **HadCRUT.4.6.0.0.median.nc**. What variables, dimensions and attributes are present in this dataset?
 
 ```{r}
-# Add your solution here
+# import
+HadCRUT_data = nc_open('../data/HadCRUT.4.6.0.0.median.nc')
+print(HadCRUT_data)
+
 ```
 
 Extract lon, lat, time and temperature anomaly as well as the fill value. Use the attributes on the time variable to convert it to a timestamp. Replace filled data with NaNs. Combine the selected data into a list.
 
 ```{r}
-# Add your solution here
+# select needed data 
+hlon <- ncvar_get(HadCRUT_data, "longitude")
+hlat <- ncvar_get(HadCRUT_data, "latitude", verbose = F)
+time <- ncvar_get(HadCRUT_data, "time")
+timestamp <- as_date(time, origin = "1850-01-01")
+temp_ano <- ncvar_get(HadCRUT_data, "temperature_anomaly")
+fillvalue = ncatt_get(HadCRUT_data, "temperature_anomaly", "missing_value", verbose="F")
+nc_close(HadCRUT_data)
+
+# check fill values
+sum(temp_ano == fillvalue$value)
+temp_ano[temp_ano == fillvalue$value] = NaN
+
+# create list
+temperature_anomaly = list(hlat=hlat, hlon=hlon, time=timestamp, temp=temp_ano)
+
 ```
 
 # Correlations between temperature anomaly and other variables
@@ -72,7 +147,10 @@ Extract lon, lat, time and temperature anomaly as well as the fill value. Use th
 Look at the dimensions of our two datasets. If regridding is required to compare the two datasets, regrid the mean temperature data.
 
 ```{r}
-# Add your solution here
+# check dimensions
+dim(abs_tem$tem)
+dim(temperature_anomaly$temp)
+
 ```
 
 We will consider correlations between temperature anomaly in June and December 2015. Select these slices and plot scatterplots between (longitude, latitude, absolute latitude, mean temperature) and temperature anomalies for June and December 2015. 
@@ -84,18 +162,76 @@ We will consider correlations between temperature anomaly in June and December 2
 * Save the slopes and p-values for the linear fits as well as the Pearson correlation coefficients.
 
 ```{r}
-# Add your solution here
+# function for selecting one month data
+month_slice = function(input, ystart, yend){
+  tmpdata = array(dim=c(72, 36, 2040))
+  for (n in 1:2040){
+    if (ymd(temperature_anomaly$time[n]) %within% interval(ymd(ystart),ymd(yend))){
+      tmpdata <- temperature_anomaly$temp[,,n]
+    }
+  }
+   return(tmpdata)
+}
+
+jun_ano <- month_slice(temperature_anomaly, "2015-06-01", "2015-06-30")
+dec_ano <- month_slice(temperature_anomaly, "2015-12-01", "2015-12-31")
+
+# function to normalise
+normalize <- function(x) {
+ normalized = (x-min(x,na.rm=TRUE))/(max(x,na.rm=TRUE)-min(x,na.rm=TRUE))
+}
+
+# normalizing 
+temperature_anomaly$hlat_norm <- normalize(temperature_anomaly$hlat)
+temperature_anomaly$hlon_norm <- normalize(temperature_anomaly$hlon)
+temperature_anomaly$abshlat_norm <- normalize(abs(temperature_anomaly$hlat))
+abs_tem$tem_norm <- normalize(abs_tem$tem)
+# creating a data frame for plotting
+hlon_vec = rep(temperature_anomaly$hlon_norm, 36)
+hlat_vec = rep(temperature_anomaly$hlat_norm, each = 72)
+abshlat_vec = rep(temperature_anomaly$abshlat_norm, each = 72)
+tem6_vec = as.vector(abs_tem$tem_norm[,,6])
+tem12_vec = as.vector(abs_tem$tem_norm[,,12])
+jun_temp_vec = as.vector(jun_ano[,]) 
+dec_temp_vec = as.vector(dec_ano[,]) 
+jundec = data.frame(x=hlon_vec,y=hlat_vec, z=abshlat_vec, tem6=tem6_vec, tem12=tem12_vec, jun=jun_temp_vec, dec=dec_temp_vec)
+
+# introduce plotting package
+install.packages("ggpubr")
+require(ggpubr)
+require(patchwork)
+
+# plot and store
+p1 <- ggplot(jundec, aes(x = x, y = jun)) + geom_point(color = 1) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm lon", y = "temp ano jun") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$jun ~ jundec$x))[2], digits = 4))))
+
+p2 <- ggplot(jundec, aes(x = x, y = dec)) + geom_point(color = 3) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm lon", y = "temp ano dec") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$dec ~ jundec$x))[2], digits = 4))))
+
+p3 <- ggplot(jundec, aes(x = y, y = jun)) + geom_point(color = 1) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm lat", y = "temp ano jun") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$jun ~ jundec$y))[2], digits = 4))))
+
+p4 <- ggplot(jundec, aes(x = y, y = dec)) + geom_point(color = 3) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm lat", y = "temp ano dec") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$dec ~ jundec$y))[2], digits = 4))))
+
+p5 <- ggplot(jundec, aes(x = z, y = jun)) + geom_point(color = 1) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm abslat", y = "temp ano jun") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$jun ~ jundec$z))[2], digits = 4))))
+
+p6 <- ggplot(jundec, aes(x = z, y = dec)) + geom_point(color = 3) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "norm abslat", y = "temp ano dec") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$dec ~ jundec$z))[2], digits = 4))))
+
+p7 <- ggplot(jundec, aes(x = tem6, y = jun)) + geom_point(color = 1) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "mean tem jun", y = "temp ano jun") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$jun ~ jundec$tem6))[2], digits = 4))))
+
+p8 <- ggplot(jundec, aes(x = tem12, y = dec)) + geom_point(color = 3) + geom_smooth(formula = y ~ x, method = "lm", color = 2) + labs(x = "mean tem dec", y = "temp ano dec") + stat_cor(method = "pearson", label.x=0, label.y=10) + annotate("text",x=0.125,y=-4,label=(paste0("slope=", format(coef(lm(jundec$dec ~ jundec$tem12))[2], digits = 4))))
+
+# patch all the plots into one
+(p1|p2)/(p3|p4)/(p5|p6)/(p7|p8)
 ```
 
 What patterns can you see in the data you have plotted?
 
 * Which variable has the largest slope for the relationship with temperature anomaly? 
 
-*Solution* 
+*The latitude* 
 
 * Which variable has the closest relationship to temperature anomaly (highest Pearson correlation coefficient)?
 
-*Solution*
+
+*The latitude*
 
 * Looking at the shapes of the curves, are there other transformations or processing approaches you would apply to the data to further investigate relationships?
 
